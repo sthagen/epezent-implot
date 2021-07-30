@@ -20,7 +20,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-// ImPlot v0.11 WIP
+// ImPlot v0.12 WIP
 
 /*
 
@@ -2054,22 +2054,6 @@ bool BeginPlot(const char* title, const char* x_label, const char* y1_label, con
     for (int i = 0; i < IMPLOT_Y_AXES; ++i)
         plot.YAxis[i].Constrain();
 
-    // constrain equal axes for primary x and y if not approximately equal
-    // constrains x to y since x pixel size depends on y labels width, and causes feedback loops in opposite case
-    if (ImHasFlag(plot.Flags, ImPlotFlags_Equal)) {
-        double xar = plot.XAxis.GetAspect();
-        double yar = plot.YAxis[0].GetAspect();
-        // edge case: user has set x range this frame, so fit y to x so that we honor their request for x range
-        // NB: because of feedback across several frames, the user's x request may not be perfectly honored
-        if (gp.NextPlotData.HasXRange) {
-            plot.YAxis[0].SetAspect(xar);
-        }
-        else {
-            if (!ImAlmostEqual(xar,yar) && !plot.YAxis[0].IsInputLocked())
-                plot.XAxis.SetAspect(yar);
-        }
-    }
-
     // AXIS COLORS -----------------------------------------------------------------
 
     UpdateAxisColors(ImPlotCol_XAxis,  &plot.XAxis);
@@ -2235,6 +2219,23 @@ bool BeginPlot(const char* title, const char* x_label, const char* y1_label, con
     plot.XAxis.Pixels = plot.PlotRect.GetWidth();
     for (int i = 0; i < IMPLOT_Y_AXES; ++i)
         plot.YAxis[i].Pixels = plot.PlotRect.GetHeight();
+
+    // Equal axis constraint. Must happen after we set Pixels
+    // constrain equal axes for primary x and y if not approximately equal
+    // constrains x to y since x pixel size depends on y labels width, and causes feedback loops in opposite case
+    if (ImHasFlag(plot.Flags, ImPlotFlags_Equal)) {
+        double xar = plot.XAxis.GetAspect();
+        double yar = plot.YAxis[0].GetAspect();
+        // edge case: user has set x range this frame, so fit y to x so that we honor their request for x range
+        // NB: because of feedback across several frames, the user's x request may not be perfectly honored
+        if (gp.NextPlotData.HasXRange) {
+            plot.YAxis[0].SetAspect(xar);
+        }
+        else {
+            if (!ImAlmostEqual(xar,yar) && !plot.YAxis[0].IsInputLocked())
+                plot.XAxis.SetAspect(yar);
+        }
+    }
 
     // INPUT ------------------------------------------------------------------
     HandlePlotInput(plot);
@@ -2808,7 +2809,6 @@ bool BeginSubplots(const char* title, int rows, int cols, const ImVec2& size, Im
 
     // calc plot frame sizes
     ImVec2 title_size(0.0f, 0.0f);
-    const float txt_height = ImGui::GetTextLineHeight();
     if (!ImHasFlag(subplot.Flags, ImPlotSubplotFlags_NoTitle))
          title_size = ImGui::CalcTextSize(title, NULL, true);
     const float pad_top = title_size.x > 0.0f ? title_size.y + gp.Style.LabelPadding.y : 0;
@@ -2851,12 +2851,10 @@ bool BeginSubplots(const char* title, int rows, int cols, const ImVec2& size, Im
     // render splitters
     if (!ImHasFlag(subplot.Flags, ImPlotSubplotFlags_NoResize)) {
         ImDrawList& DrawList = *ImGui::GetWindowDrawList();
-        const ImU32 nrm_col = ImGui::ColorConvertFloat4ToU32(GImGui->Style.Colors[ImGuiCol_Separator]);
         const ImU32 hov_col = ImGui::ColorConvertFloat4ToU32(GImGui->Style.Colors[ImGuiCol_SeparatorHovered]);
         const ImU32 act_col = ImGui::ColorConvertFloat4ToU32(GImGui->Style.Colors[ImGuiCol_SeparatorActive]);
         float xpos = subplot.GridRect.Min.x;
         float ypos = subplot.GridRect.Min.y;
-        const ImVec2 mouse = ImGui::GetIO().MousePos;
         int separator = 1;
         // bool pass = false;
         for (int r = 0; r < subplot.Rows-1; ++r) {
@@ -3177,6 +3175,12 @@ void PushPlotClipRect(float expand) {
 
 void PopPlotClipRect() {
     ImGui::PopClipRect();
+}
+
+bool IsSubplotsHovered() {
+    ImPlotContext& gp = *GImPlot;
+    IM_ASSERT_USER_ERROR(gp.CurrentSubplot != NULL, "IsSubplotsHovered() needs to be called between BeginSubplots() and EndSubplots()!");
+    return gp.CurrentSubplot->FrameHovered;
 }
 
 bool IsPlotHovered() {
